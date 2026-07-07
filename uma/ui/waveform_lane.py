@@ -6,11 +6,12 @@ up across every stacked lane.
 from __future__ import annotations
 
 import numpy as np
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QLine
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 from .viewport import ViewState, pick_marker
+from ..peaks import pixel_envelope
 
 LANE_HEIGHT = 90
 GRAB_TOL = 6  # pixels within which a marker can be grabbed
@@ -43,6 +44,8 @@ class WaveformLane(QWidget):
         self.out_point = 0
         self.splits: list[int] = []
         self._dragging = False
+        self._wave_key = None      # cache: envelope only recomputed on view change
+        self._wave_lines: list[QLine] = []
 
     def set_view(self, view: ViewState):
         self.view = view
@@ -125,20 +128,21 @@ class WaveformLane(QWidget):
         level = self.pyramid.level_for(spp)
         mins, maxs = self.pyramid.levels[level]
         spb = self.pyramid.samples_per_bucket(level)
-        nb = len(mins)
         amp = mid * 0.9
 
+        key = (id(self.pyramid), level, round(view.start_frame, 1),
+               round(spp, 4), w, h)
+        if key != self._wave_key:
+            vmin, vmax, valid = pixel_envelope(
+                mins, maxs, spb, view.start_frame, spp, w, self.frames)
+            y_top = (mid - vmax * amp).astype(int)
+            y_bot = (mid - vmin * amp).astype(int)
+            self._wave_lines = [QLine(x, int(y_top[x]), x, int(y_bot[x]))
+                                for x in range(w) if valid[x]]
+            self._wave_key = key
+
         p.setPen(QPen(self.color))
-        for x in range(w):
-            frame = view.x_to_frame(x)
-            if frame < 0 or frame >= self.frames:
-                continue
-            b = int(frame / spb)
-            if b < 0 or b >= nb:
-                continue
-            y_top = mid - float(maxs[b]) * amp
-            y_bot = mid - float(mins[b]) * amp
-            p.drawLine(x, int(y_top), x, int(y_bot))
+        p.drawLines(self._wave_lines)
 
     def _draw_markers(self, p: QPainter, h):
         view = self.view

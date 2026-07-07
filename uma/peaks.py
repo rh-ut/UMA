@@ -46,6 +46,49 @@ def downsample_peaks(mins: np.ndarray, maxs: np.ndarray, factor: int
     return dmin, dmax
 
 
+def pixel_envelope(mins: np.ndarray, maxs: np.ndarray, spb: int,
+                   start_frame: float, spp: float, width: int, frames: int
+                   ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Per-pixel min/max envelope for a waveform view.
+
+    For each of `width` pixel columns, aggregates every peak bucket that falls
+    within that column's frame span (min of mins, max of maxs) — so the drawn
+    envelope is smooth and accurate at any zoom, instead of blocky when buckets
+    are wider than a pixel. `spb` is samples per bucket of the chosen level.
+
+    Returns (vmin, vmax, valid); `valid[x]` is False where the column lies past
+    the end of the data.
+    """
+    vmin = np.zeros(width, dtype=np.float32)
+    vmax = np.zeros(width, dtype=np.float32)
+    valid = np.zeros(width, dtype=bool)
+    nb = len(mins)
+    if nb == 0 or width <= 0:
+        return vmin, vmax, valid
+
+    edges = start_frame + np.arange(width + 1) * spp   # frame at each pixel edge
+    bounds = np.clip((edges / spb).astype(np.int64), 0, nb)
+    lo = bounds[:width]
+    hi = bounds[1:]
+
+    f0 = edges[:width]
+    valid = (f0 >= 0) & (f0 < frames) & (lo < nb)
+
+    idx = np.clip(lo, 0, nb - 1)
+    vmin = np.minimum.reduceat(mins, idx).astype(np.float32)
+    vmax = np.maximum.reduceat(maxs, idx).astype(np.float32)
+
+    # reduceat lumps [idx[-1]:] into the final column; recompute it exactly
+    l, h = int(idx[width - 1]), int(hi[width - 1])
+    if h > l:
+        vmin[width - 1] = mins[l:h].min()
+        vmax[width - 1] = maxs[l:h].max()
+    else:
+        vmin[width - 1] = mins[l]
+        vmax[width - 1] = maxs[l]
+    return vmin, vmax, valid
+
+
 class PeakPyramid:
     """A stack of min/max envelopes at geometrically increasing bucket sizes.
 
@@ -67,11 +110,20 @@ class PeakPyramid:
         return self.base_bucket * (self.factor ** level)
 
     def level_for(self, samples_per_pixel: float) -> int:
-        """Finest level whose buckets are at least as wide as one pixel."""
+        """Coarsest level whose buckets are no wider than one pixel.
+
+        Buckets finer than a pixel let each pixel aggregate several of them
+        into a smooth envelope; a level coarser than a pixel would make
+        neighbouring pixels share one bucket value and look blocky. Falls back
+        to the finest level when even that is coarser than a pixel (deep zoom).
+        """
+        best = 0
         for lvl in range(len(self.levels)):
-            if self.samples_per_bucket(lvl) >= samples_per_pixel:
-                return lvl
-        return len(self.levels) - 1
+            if self.samples_per_bucket(lvl) <= samples_per_pixel:
+                best = lvl
+            else:
+                break
+        return best
 
     @classmethod
     def from_samples(cls, samples: np.ndarray, base_bucket: int,

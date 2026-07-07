@@ -11,7 +11,7 @@ from PySide6.QtCore import QThread, Signal
 from ..io_audio import open_source
 from ..peaks import compute_peaks, PeakPyramid
 
-BASE_BUCKET = 256
+BASE_BUCKET = 64      # finer base -> sharper detail when zoomed in
 FACTOR = 8
 CHUNK = 1 << 20  # ~1M frames per read
 
