@@ -18,7 +18,33 @@ sample-accurately synchronous by construction — no drift possible.
   master gain and a clip indicator.
 - **Export** each segment to stereo **WAV** (24/16-bit) or **MP3** (192–320 kbps).
 
-## Install
+## Windows (standalone, no X server)
+
+UMA runs natively on Windows — Qt uses native windows, so **no X server is
+needed**, and the `sounddevice` Windows package bundles PortAudio, so **live
+playback works with no extra install**.
+
+**Option A — prebuilt executable:** run `dist\uma.exe` (single self-contained
+file; first launch takes a few seconds while it unpacks).
+
+**Option B — build it yourself:** with Python 3.10+ for Windows on PATH:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build_windows.ps1
+```
+
+This creates a venv, runs the tests, and produces `dist\uma.exe`.
+
+**Option C — run from source on Windows:**
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+py -m uma
+```
+
+## Install (Linux/macOS)
 
 ```bash
 python3 -m venv .venv
