@@ -174,7 +174,8 @@ class PlaybackEngine:
         except queue.Empty:
             outdata[:] = 0
             # queue empty at end of material -> finish
-            if not self._playing or self._pos >= self._loop_end:
+            if self._pos >= self._loop_end:
+                self._playing = False   # let the GUI reset transport
                 self._finish()
             return
         if gen != self._generation:
