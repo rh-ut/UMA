@@ -72,6 +72,25 @@ def main():
     print(f"segments: {segs}")
     assert len(segs) == 2
 
+    # --- mouse marker editing (through the lane signals -> wired handlers) ---
+    lane = win.rows[0].lane
+    lane.marker_grabbed.emit("out", -1)
+    lane.marker_moved.emit(win.session.frames - 100)
+    lane.marker_released.emit()
+    assert win.session.effective_out == win.session.frames - 100, "drag out failed"
+
+    before = len(win.session.split_markers)
+    lane.split_add_requested.emit(win.session.frames // 3)   # double-click add
+    assert len(win.session.split_markers) == before + 1, "split add failed"
+
+    idx = len(win.session.split_markers) - 1
+    lane.marker_grabbed.emit("split", idx)                   # drag the split
+    lane.marker_moved.emit(win.session.frames // 2 + 500)
+    lane.marker_released.emit()
+    lane.split_remove_requested.emit(idx)                    # right-click remove
+    assert len(win.session.split_markers) == before, "split remove failed"
+    print("mouse marker editing ok")
+
     # mix params live
     win._on_gain(0, 0.5)
     win._on_pan(0, -1.0)

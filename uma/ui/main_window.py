@@ -36,6 +36,7 @@ class MainWindow(QMainWindow):
         self.engine: PlaybackEngine | None = None
         self.view = ViewState(0, 1000.0, 48000)
         self.play_pos = 0
+        self._drag = None   # active marker drag: (kind, index)
 
         self._build_toolbar()
         self._build_body()
@@ -205,6 +206,11 @@ class MainWindow(QMainWindow):
             row.mute_toggled.connect(self._on_mute)
             row.solo_toggled.connect(self._on_solo)
             row.seek_requested.connect(self.seek)
+            row.lane.marker_grabbed.connect(self._on_marker_grabbed)
+            row.lane.marker_moved.connect(self._on_marker_moved)
+            row.lane.marker_released.connect(self._on_marker_released)
+            row.lane.split_add_requested.connect(self._on_split_add)
+            row.lane.split_remove_requested.connect(self._on_split_remove)
             row.lane.frames = self.session.frames
             row.lane.set_view(self.view)
             self.rows_layout.insertWidget(self.rows_layout.count() - 1, row)
@@ -316,6 +322,39 @@ class MainWindow(QMainWindow):
         for row in self.rows:
             row.lane.set_markers(s.in_point, s.effective_out,
                                  list(s.split_markers), self.play_pos)
+
+    # ---- mouse marker dragging ----------------------------------------
+    def _on_marker_grabbed(self, kind, index):
+        self._drag = (kind, index)
+
+    def _on_marker_moved(self, frame):
+        if not self._drag or not self.session:
+            return
+        kind, index = self._drag
+        s = self.session
+        if kind == "in":
+            s.in_point = max(0, min(frame, s.effective_out - 1))
+        elif kind == "out":
+            s.out_point = min(s.frames, max(frame, s.in_point + 1))
+        elif kind == "split" and 0 <= index < len(s.split_markers):
+            lo, hi = s.in_point + 1, s.effective_out - 1
+            s.split_markers[index] = max(lo, min(frame, hi))
+        self._update_markers()
+
+    def _on_marker_released(self):
+        self._drag = None
+
+    def _on_split_add(self, frame):
+        s = self.session
+        if s and s.in_point < frame < s.effective_out and frame not in s.split_markers:
+            s.split_markers.append(int(frame))
+            self._update_markers()
+
+    def _on_split_remove(self, index):
+        s = self.session
+        if s and 0 <= index < len(s.split_markers):
+            del s.split_markers[index]
+            self._update_markers()
 
     # ---- view / zoom / scroll -----------------------------------------
     def _lane_width(self) -> int:

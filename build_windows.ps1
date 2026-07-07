@@ -22,12 +22,22 @@ $py = ".\.venv\Scripts\python.exe"
 # 3. verify before packaging
 & $py -m pytest tests -q
 
-# 4. one-file, windowed (no console) build
-& $py -m PyInstaller --noconfirm --clean --name uma --onefile --windowed `
-    --paths . `
-    --collect-binaries sounddevice --collect-binaries soundfile --collect-binaries _soundfile_data `
-    --collect-submodules PySide6 `
-    run_uma.py
+$common = @(
+    "--noconfirm", "--clean", "--name", "uma", "--windowed",
+    "--paths", ".",
+    "--collect-binaries", "sounddevice",
+    "--collect-binaries", "soundfile",
+    "--collect-binaries", "_soundfile_data",
+    "--collect-submodules", "PySide6"
+)
+
+# 4a. one-file build -> dist\uma.exe (single portable file, slower first start)
+& $py -m PyInstaller @common --onefile run_uma.py
+
+# 4b. one-dir build -> dist_onedir\uma\uma.exe (starts instantly, it's a folder)
+& $py -m PyInstaller @common --onedir --distpath dist_onedir run_uma.py
 
 Write-Output ""
-Write-Output "Done. Executable: dist\uma.exe"
+Write-Output "Done."
+Write-Output "  Single file : dist\uma.exe"
+Write-Output "  Fast folder : dist_onedir\uma\uma.exe"

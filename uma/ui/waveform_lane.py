@@ -10,19 +10,30 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
-from .viewport import ViewState
+from .viewport import ViewState, pick_marker
 
 LANE_HEIGHT = 90
+GRAB_TOL = 6  # pixels within which a marker can be grabbed
 
 
 class WaveformLane(QWidget):
-    """Displays a peak pyramid; forwards clicks as seek requests (in frames)."""
+    """Displays a peak pyramid and lets the shared markers be dragged.
+
+    Emits frame-space signals; the main window owns the Session and applies
+    them, then pushes the updated markers back via set_markers().
+    """
 
     seek_requested = Signal(int)
+    marker_grabbed = Signal(str, int)     # (kind, index)  kind in in/out/split
+    marker_moved = Signal(int)            # new frame during a drag
+    marker_released = Signal()
+    split_add_requested = Signal(int)     # frame (double-click)
+    split_remove_requested = Signal(int)  # split index (right-click)
 
     def __init__(self, color="#4e9a06", parent=None):
         super().__init__(parent)
         self.setMinimumHeight(LANE_HEIGHT)
+        self.setMouseTracking(True)  # so we can show a resize cursor on hover
         self.color = QColor(color)
         self.view: ViewState | None = None
         self.pyramid = None
@@ -31,6 +42,7 @@ class WaveformLane(QWidget):
         self.in_point = 0
         self.out_point = 0
         self.splits: list[int] = []
+        self._dragging = False
 
     def set_view(self, view: ViewState):
         self.view = view
@@ -44,10 +56,49 @@ class WaveformLane(QWidget):
         self.update()
 
     # ------------------------------------------------------------------
+    def _candidates(self):
+        cands = [("in", -1, self.in_point), ("out", -1, self.out_point)]
+        cands += [("split", i, f) for i, f in enumerate(self.splits)]
+        return cands
+
+    def _frame_at(self, x) -> int:
+        return int(max(0, min(self.frames, self.view.x_to_frame(x))))
+
     def mousePressEvent(self, ev):
+        if self.view is None:
+            return
+        x = ev.position().x()
+        if ev.button() == Qt.RightButton:
+            hit = pick_marker(x, self._candidates(), self.view, GRAB_TOL)
+            if hit and hit[0] == "split":
+                self.split_remove_requested.emit(hit[1])
+            return
+        if ev.button() != Qt.LeftButton:
+            return
+        hit = pick_marker(x, self._candidates(), self.view, GRAB_TOL)
+        if hit is not None:
+            self._dragging = True
+            self.marker_grabbed.emit(hit[0], hit[1])
+        else:
+            self.seek_requested.emit(self._frame_at(x))
+
+    def mouseMoveEvent(self, ev):
+        if self.view is None:
+            return
+        if self._dragging:
+            self.marker_moved.emit(self._frame_at(ev.position().x()))
+        else:
+            hit = pick_marker(ev.position().x(), self._candidates(), self.view, GRAB_TOL)
+            self.setCursor(Qt.SizeHorCursor if hit else Qt.ArrowCursor)
+
+    def mouseReleaseEvent(self, ev):
+        if self._dragging and ev.button() == Qt.LeftButton:
+            self._dragging = False
+            self.marker_released.emit()
+
+    def mouseDoubleClickEvent(self, ev):
         if self.view is not None and ev.button() == Qt.LeftButton:
-            frame = int(self.view.x_to_frame(ev.position().x()))
-            self.seek_requested.emit(max(0, min(self.frames, frame)))
+            self.split_add_requested.emit(self._frame_at(ev.position().x()))
 
     def paintEvent(self, _ev):
         p = QPainter(self)
