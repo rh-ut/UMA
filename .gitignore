@@ -9,5 +9,6 @@ dist_onedir/
 *.spec
 # audio scratch / exports
 /scratch/
+/Data/          # local working data (raw inputs / exports), never committed
 *.mp3
 !docs/**/*.mp3
