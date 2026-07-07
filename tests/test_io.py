@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import soundfile as sf
 import pytest
@@ -43,13 +45,13 @@ class TestScanFolder:
         for name in ["ch10.wav", "ch2.wav", "ch1.wav", "notes.txt"]:
             (tmp_path / name).write_bytes(b"") if name.endswith(".txt") else \
                 write_wav(tmp_path / name, np.zeros(4, dtype=np.float32))
-        found = [p.rsplit("/", 1)[-1] for p in scan_session_folder(str(tmp_path))]
+        found = [os.path.basename(p) for p in scan_session_folder(str(tmp_path))]
         assert found == ["ch1.wav", "ch2.wav", "ch10.wav"]
 
     def test_picks_up_flac_too(self, tmp_path):
         write_wav(tmp_path / "a.wav", np.zeros(4, dtype=np.float32))
         sf.write(str(tmp_path / "b.flac"), np.zeros(4, dtype=np.float32), 48000)
-        found = [p.rsplit("/", 1)[-1] for p in scan_session_folder(str(tmp_path))]
+        found = [os.path.basename(p) for p in scan_session_folder(str(tmp_path))]
         assert set(found) == {"a.wav", "b.flac"}
 
 
