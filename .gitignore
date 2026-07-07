@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+# audio scratch / exports
+/scratch/
+*.mp3
+!docs/**/*.mp3
